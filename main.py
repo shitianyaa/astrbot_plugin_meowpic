@@ -236,7 +236,22 @@ class MeowPicPlugin(Star):
         if not image_url:
             raise UserFacingError("没有从 API 响应里找到图片地址")
 
-        return image_url, None
+        # 下载图片到本地，避免 QQ 客户端访问外网图床超时（如 retcode=1200）
+        temp_path = await self._download_image(image_url, timeout)
+        return temp_path, temp_path
+
+    async def _download_image(
+        self, image_url: str, timeout: aiohttp.ClientTimeout
+    ) -> str:
+        session = self._ensure_session()
+        async with session.get(image_url, timeout=timeout, allow_redirects=True) as resp:
+            if resp.status >= 400:
+                raise UserFacingError(f"图片下载失败: HTTP {resp.status}")
+            content_type = resp.headers.get("Content-Type", "").split(";", 1)[0].lower()
+            image_bytes = await resp.read()
+        if not image_bytes:
+            raise UserFacingError("图片下载到的内容为空")
+        return self._write_temp_image(image_bytes, content_type, str(resp.url))
 
     def _build_request(self, api_url: str, api_key: str) -> tuple[str, dict[str, str]]:
         if api_key and "{api_key}" in api_url:
