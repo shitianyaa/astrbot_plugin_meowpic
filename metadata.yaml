@@ -3,7 +3,7 @@ display_name: 喵图姬
 desc: 随机小姐姐图片插件，支持用户自定义 API 站点和 API Key，并带有用户级短时限流。
 version: 1.0.0
 author: Sham1k0
-repo: ""
+repo: "https://github.com/shitianyaa/astrbot_plugin_meowpic"
 keywords:
   - image
   - random

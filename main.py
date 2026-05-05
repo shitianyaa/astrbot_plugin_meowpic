@@ -19,6 +19,7 @@ KV_USER_CONFIGS = "user_configs"
 LOG_PREFIX = "[MeowPic]"
 DEFAULT_LIMIT_MESSAGE = "冲的太快了喵~"
 DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_API_URL = "https://free.wqwlkj.cn/wqwlapi/ks_2cy.php?type=image"
 IMAGE_SUFFIX_BY_CONTENT_TYPE = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -205,12 +206,6 @@ class MeowPicPlugin(Star):
         api_url = (user_conf.get("api_url") or self._get_default_api_url()).strip()
         api_key = (user_conf.get("api_key") or self._get_default_api_key()).strip()
 
-        if not api_url:
-            raise UserFacingError(
-                "还没有配置图片 API 喵，请先用 /meowpic setapi <API地址>，"
-                "或在 AstrBot 插件配置里设置默认 API"
-            )
-
         request_url, headers = self._build_request(api_url, api_key)
         timeout = aiohttp.ClientTimeout(
             total=self._get_float(
@@ -239,32 +234,14 @@ class MeowPicPlugin(Star):
 
         image_url = self._extract_image_url(raw_text, request_url)
         if not image_url:
-            raise UserFacingError("没有从 API 响应里找到图片地址，请检查 image_url_path 配置")
+            raise UserFacingError("没有从 API 响应里找到图片地址")
 
         return image_url, None
 
     def _build_request(self, api_url: str, api_key: str) -> tuple[str, dict[str, str]]:
-        headers: dict[str, str] = {}
-        if not api_key:
-            return api_url, headers
-
-        if "{api_key}" in api_url:
-            return api_url.replace("{api_key}", quote(api_key, safe="")), headers
-
-        header_name = (self.config.get("api_key_header", "") or "").strip()
-        if header_name:
-            prefix = (self.config.get("api_key_header_prefix", "") or "").strip()
-            headers[header_name] = f"{prefix} {api_key}".strip() if prefix else api_key
-            return api_url, headers
-
-        query_name = (self.config.get("api_key_query_name", "key") or "").strip()
-        if not query_name:
-            return api_url, headers
-
-        parsed = urlparse(api_url)
-        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-        query.setdefault(query_name, api_key)
-        return urlunparse(parsed._replace(query=urlencode(query))), headers
+        if api_key and "{api_key}" in api_url:
+            return api_url.replace("{api_key}", quote(api_key, safe="")), {}
+        return api_url, {}
 
     def _extract_image_url(self, raw_text: str, base_url: str) -> str | None:
         text = (raw_text or "").strip().strip('"').strip("'")
@@ -276,39 +253,10 @@ class MeowPicPlugin(Star):
         except json.JSONDecodeError:
             return None
 
-        path = (self.config.get("image_url_path", "") or "").strip()
-        if path:
-            value = self._extract_by_path(payload, path)
-            candidates = self._collect_image_urls(value, from_hint=True)
-            if candidates:
-                return urljoin(base_url, random.choice(candidates))
-
         candidates = self._collect_image_urls(payload, from_hint=False)
         if not candidates:
             return None
         return urljoin(base_url, random.choice(candidates))
-
-    def _extract_by_path(self, payload: Any, path: str) -> Any:
-        current = payload
-        for part in path.replace("[", ".[").split("."):
-            part = part.strip()
-            if not part:
-                continue
-            if part.startswith("[") and part.endswith("]"):
-                if not isinstance(current, list):
-                    return None
-                index_raw = part[1:-1].strip()
-                if index_raw == "*":
-                    return current
-                try:
-                    current = current[int(index_raw)]
-                except (ValueError, IndexError):
-                    return None
-                continue
-            if not isinstance(current, dict):
-                return None
-            current = current.get(part)
-        return current
 
     def _collect_image_urls(self, value: Any, from_hint: bool) -> list[str]:
         found: dict[str, None] = {}
@@ -434,7 +382,7 @@ class MeowPicPlugin(Star):
             return None
 
     def _get_default_api_url(self) -> str:
-        return (self.config.get("default_api_url", "") or "").strip()
+        return (self.config.get("default_api_url", "") or DEFAULT_API_URL).strip()
 
     def _get_default_api_key(self) -> str:
         return (self.config.get("default_api_key", "") or "").strip()
