@@ -1,16 +1,46 @@
 {
-  "default_api_url": {
-    "description": "图片 API 地址",
+  "api_meinv_url": {
+    "description": "随机小姐姐 API",
     "type": "string",
-    "default": "https://free.wqwlkj.cn/wqwlapi/ks_2cy.php?type=image",
-    "hint": "默认使用「无情API - 抠脚大汉」接口（https://free.wqwlkj.cn/wqwlapi/ks_2cy.php?type=image）。可改成任意直接返回图片的 API，如 type=image 直接出图，type=text 返回图片链接。如需带 Key，URL 里写 {api_key} 即可，例：https://example.com/random?token={api_key}"
+    "default": "https://v2.xxapi.cn/api/meinvpic",
+    "hint": "/mm、/小姐姐、/美女、/meowpic get 默认使用这个接口。"
+  },
+  "api_baisi_url": {
+    "description": "白丝 API",
+    "type": "string",
+    "default": "https://v2.xxapi.cn/api/baisi",
+    "hint": "/白丝 或 /meowpic baisi 使用这个接口。"
+  },
+  "api_heisi_url": {
+    "description": "黑丝 API",
+    "type": "string",
+    "default": "https://v2.xxapi.cn/api/heisi",
+    "hint": "/黑丝 或 /meowpic heisi 使用这个接口。"
+  },
+  "api_acg_url": {
+    "description": "二次元 API",
+    "type": "string",
+    "default": "https://v2.xxapi.cn/api/randomAcgPic?type=pc",
+    "hint": "/二次元 或 /meowpic acg 使用这个接口。"
+  },
+  "api_jk_url": {
+    "description": "JK API",
+    "type": "string",
+    "default": "https://v2.xxapi.cn/api/jk",
+    "hint": "/jk 或 /meowpic jk 使用这个接口。"
+  },
+  "default_api_url": {
+    "description": "旧版默认 API 地址",
+    "type": "string",
+    "default": "",
+    "hint": "兼容旧版配置。一般不用填；随机小姐姐分类会优先使用 api_meinv_url。"
   },
   "default_api_key": {
-    "description": "API Key（可选）",
+    "description": "通用 API Key（可选）",
     "type": "string",
     "default": "",
     "obvious_hint": true,
-    "hint": "可选。仅当上面 API 地址里写了 {api_key} 占位符时才会被替换进去。无情API 不需要 Key，留空即可。"
+    "hint": "可选。仅当 API 地址里写了 {api_key} 占位符时才会被替换进去。"
   },
   "request_timeout_seconds": {
     "description": "请求超时（秒）",

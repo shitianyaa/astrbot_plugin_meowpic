@@ -1,7 +1,7 @@
 name: astrbot_plugin_meowpic
 display_name: 喵图姬
-desc: 随机小姐姐图片插件，支持用户自定义 API 站点和 API Key，并带有用户级短时限流。
-version: 1.0.0
+desc: 多分类随机图片插件，支持小姐姐、白丝、黑丝、二次元、JK、自定义 API 和用户级短时限流。
+version: 1.1.0
 author: Sham1k0
 repo: "https://github.com/shitianyaa/astrbot_plugin_meowpic"
 keywords:
@@ -10,6 +10,10 @@ keywords:
   - meizi
   - 小姐姐
   - 美女
+  - 白丝
+  - 黑丝
+  - 二次元
+  - JK
 support_platforms:
   - aiocqhttp
   - qq_official
