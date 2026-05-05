@@ -18,6 +18,12 @@
     "default": 15.0,
     "hint": "访问图片 API 的最大等待秒数，范围 3-120。"
   },
+  "image_referer": {
+    "description": "图片下载 Referer",
+    "type": "string",
+    "default": "auto",
+    "hint": "用于处理图床 HTTP 403 防盗链。auto 会自动尝试无 Referer、图片域名 Referer、API 域名 Referer；none 表示不发送 Referer；也可以填写固定地址，例如 https://example.com/"
+  },
   "rate_limit_enabled": {
     "description": "启用限流",
     "type": "bool",

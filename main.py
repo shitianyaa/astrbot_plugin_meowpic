@@ -20,6 +20,11 @@ LOG_PREFIX = "[MeowPic]"
 DEFAULT_LIMIT_MESSAGE = "冲的太快了喵~"
 DEFAULT_TIMEOUT_SECONDS = 15.0
 DEFAULT_API_URL = "https://free.wqwlkj.cn/wqwlapi/ks_2cy.php?type=image"
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 IMAGE_SUFFIX_BY_CONTENT_TYPE = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -237,26 +242,101 @@ class MeowPicPlugin(Star):
             raise UserFacingError("没有从 API 响应里找到图片地址")
 
         # 下载图片到本地，避免 QQ 客户端访问外网图床超时（如 retcode=1200）
-        temp_path = await self._download_image(image_url, timeout)
+        temp_path = await self._download_image(image_url, timeout, request_url)
         return temp_path, temp_path
 
     async def _download_image(
-        self, image_url: str, timeout: aiohttp.ClientTimeout
+        self, image_url: str, timeout: aiohttp.ClientTimeout, referer_url: str = ""
     ) -> str:
         session = self._ensure_session()
-        async with session.get(image_url, timeout=timeout, allow_redirects=True) as resp:
-            if resp.status >= 400:
-                raise UserFacingError(f"图片下载失败: HTTP {resp.status}")
-            content_type = resp.headers.get("Content-Type", "").split(";", 1)[0].lower()
-            image_bytes = await resp.read()
-        if not image_bytes:
-            raise UserFacingError("图片下载到的内容为空")
-        return self._write_temp_image(image_bytes, content_type, str(resp.url))
+        last_status: int | None = None
+        last_content_type = ""
+
+        for headers in self._download_header_attempts(image_url, referer_url):
+            async with session.get(
+                image_url,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=True,
+            ) as resp:
+                if resp.status >= 400:
+                    last_status = resp.status
+                    if resp.status in (401, 403, 429):
+                        continue
+                    raise UserFacingError(f"图片下载失败: HTTP {resp.status}")
+
+                content_type = (
+                    resp.headers.get("Content-Type", "").split(";", 1)[0].lower()
+                )
+                image_bytes = await resp.read()
+                last_content_type = content_type
+                if image_bytes and (
+                    content_type.startswith("image/")
+                    or self._looks_like_image_url(str(resp.url))
+                ):
+                    return self._write_temp_image(
+                        image_bytes, content_type, str(resp.url)
+                    )
+
+        if last_status is not None:
+            raise UserFacingError(f"图片下载失败: HTTP {last_status}")
+        if last_content_type:
+            raise UserFacingError(f"图片下载失败: 返回类型 {last_content_type}")
+        raise UserFacingError("图片下载失败")
 
     def _build_request(self, api_url: str, api_key: str) -> tuple[str, dict[str, str]]:
         if api_key and "{api_key}" in api_url:
-            return api_url.replace("{api_key}", quote(api_key, safe="")), {}
-        return api_url, {}
+            return (
+                api_url.replace("{api_key}", quote(api_key, safe="")),
+                self._browser_headers(),
+            )
+        return api_url, self._browser_headers()
+
+    def _download_header_attempts(
+        self, image_url: str, referer_url: str = ""
+    ) -> list[dict[str, str]]:
+        configured = (self.config.get("image_referer", "auto") or "auto").strip()
+
+        if configured.lower() in {"none", "off", "false", "0"}:
+            referers: list[str | None] = [None]
+        elif configured and configured.lower() != "auto":
+            referers = [configured]
+        else:
+            referers = [
+                None,
+                self._origin_url(image_url),
+                self._origin_url(referer_url),
+            ]
+
+        seen: set[str] = set()
+        attempts: list[dict[str, str]] = []
+        for referer in referers:
+            key = referer or ""
+            if key in seen:
+                continue
+            seen.add(key)
+            attempts.append(self._browser_headers(referer))
+        return attempts
+
+    @staticmethod
+    def _browser_headers(referer: str | None = None) -> dict[str, str]:
+        headers = {
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+        if referer:
+            headers["Referer"] = referer
+        return headers
+
+    @staticmethod
+    def _origin_url(value: str) -> str:
+        parsed = urlparse(value or "")
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}/"
 
     def _extract_image_url(self, raw_text: str, base_url: str) -> str | None:
         text = (raw_text or "").strip().strip('"').strip("'")
