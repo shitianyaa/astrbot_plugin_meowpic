@@ -1,0 +1,69 @@
+{
+  "default_api_url": {
+    "description": "默认图片 API 地址",
+    "type": "string",
+    "default": "",
+    "hint": "全局默认 API。用户未使用 /meowpic setapi 配置个人 API 时会使用这里。支持直接返回图片的 API，也支持返回 JSON 图片地址的 API。"
+  },
+  "default_api_key": {
+    "description": "默认 API Key",
+    "type": "string",
+    "default": "",
+    "obvious_hint": true,
+    "hint": "可选。用户未设置个人 API Key 时会使用这里。"
+  },
+  "api_key_query_name": {
+    "description": "API Key 查询参数名",
+    "type": "string",
+    "default": "key",
+    "hint": "当 API 地址没有写 {api_key} 且 api_key_header 留空时，插件会把 API Key 追加到这个查询参数中。留空则不追加。"
+  },
+  "api_key_header": {
+    "description": "API Key 请求头名",
+    "type": "string",
+    "default": "",
+    "hint": "如果你的 API 需要把 Key 放在请求头里，在这里填写请求头名，例如 Authorization 或 X-API-Key。填写后不会再追加查询参数。"
+  },
+  "api_key_header_prefix": {
+    "description": "API Key 请求头前缀",
+    "type": "string",
+    "default": "",
+    "hint": "配合 api_key_header 使用。例如 header 是 Authorization 且这里填 Bearer 时，会发送 Authorization: Bearer <APIKey>。"
+  },
+  "image_url_path": {
+    "description": "JSON 图片地址路径",
+    "type": "string",
+    "default": "",
+    "hint": "可选。JSON API 返回时用于指定图片 URL 的字段路径，例如 data.url、data.img、data[0].url。留空则自动从常见字段里查找。"
+  },
+  "request_timeout_seconds": {
+    "description": "请求超时时间",
+    "type": "float",
+    "default": 15.0,
+    "hint": "访问图片 API 的最大等待秒数，范围 3-120。"
+  },
+  "rate_limit_enabled": {
+    "description": "启用用户限流",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，同一用户在短时间内请求超过限制会被拦截。"
+  },
+  "rate_limit_count": {
+    "description": "限流次数",
+    "type": "int",
+    "default": 3,
+    "hint": "同一用户在限流窗口内最多可请求的次数。默认 3，第四次会提示限流。"
+  },
+  "rate_limit_window_seconds": {
+    "description": "限流窗口秒数",
+    "type": "float",
+    "default": 60.0,
+    "hint": "统计同一用户请求次数的时间窗口。默认 60 秒。"
+  },
+  "rate_limit_message": {
+    "description": "限流提示语",
+    "type": "string",
+    "default": "冲的太快了喵~",
+    "hint": "同一用户短时间请求超过限制时返回的提示。"
+  }
+}

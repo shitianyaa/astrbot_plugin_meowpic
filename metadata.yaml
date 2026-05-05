@@ -1,0 +1,20 @@
+name: astrbot_plugin_meowpic
+display_name: 喵图姬
+desc: 随机小姐姐图片插件，支持用户自定义 API 站点和 API Key，并带有用户级短时限流。
+version: 1.0.0
+author: Sham1k0
+repo: ""
+keywords:
+  - image
+  - random
+  - meizi
+  - 小姐姐
+  - 美女
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
+  - discord
+  - lark
+  - dingtalk
+  - satori
