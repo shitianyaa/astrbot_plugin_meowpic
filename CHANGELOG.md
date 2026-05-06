@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 - 2026-05-06
+
+- Pixiv 默认接口切换为 Lolicon v2：`https://api.lolicon.app/setu/v2`。
+- 自动将旧内置 Pixiv 默认接口迁移到 Lolicon v2。
+- 新增 `/pixiv [标签...]`、`/meowpic pixiv [标签...]` 和 `/meowpic get pixiv [标签...]` 动态标签随机图。
+- 新增 Pixiv 专用配置：`pixiv_r18`、`pixiv_size`、`pixiv_proxy`、`pixiv_exclude_ai`、`pixiv_default_tags`、`pixiv_aspect_ratio`。
+- 优化空结果与 API 错误提示。
+
 ## 1.2.1 - 2026-05-06
 
 - 新增 `CHANGELOG.md`，开始记录版本变更。

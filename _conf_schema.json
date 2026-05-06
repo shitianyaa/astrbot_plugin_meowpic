@@ -30,10 +30,46 @@
     "hint": "/jk 或 /meowpic jk 使用这个接口。"
   },
   "api_pixiv_url": {
-    "description": "Pixiv 非 R18 API",
+    "description": "Pixiv API",
     "type": "string",
-    "default": "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re",
-    "hint": "/pixiv、/p站、/px 或 /meowpic pixiv 使用这个接口。默认带 r18Type=0。"
+    "default": "https://api.lolicon.app/setu/v2",
+    "hint": "/pixiv、/p站、/px 或 /meowpic pixiv 使用这个接口。使用 Lolicon v2 时会自动附加下方 Pixiv 参数。"
+  },
+  "pixiv_r18": {
+    "description": "Pixiv R18 模式",
+    "type": "int",
+    "default": 0,
+    "hint": "Lolicon v2 参数：0 为非 R18，1 为 R18，2 为混合。默认 0。"
+  },
+  "pixiv_size": {
+    "description": "Pixiv 图片规格",
+    "type": "string",
+    "default": "regular",
+    "hint": "Lolicon v2 参数：original、regular、small、thumb、mini。多个值可用空格或逗号分隔；默认 regular，发群更省流量。"
+  },
+  "pixiv_proxy": {
+    "description": "Pixiv 图片反代",
+    "type": "string",
+    "default": "i.pixiv.re",
+    "hint": "Lolicon v2 参数。默认 i.pixiv.re；填 false 或留空可让 API 返回原始 i.pximg.net 地址，但可能需要 Referer 才能下载。"
+  },
+  "pixiv_exclude_ai": {
+    "description": "Pixiv 排除 AI 作品",
+    "type": "bool",
+    "default": true,
+    "hint": "Lolicon v2 参数 excludeAI，开启后排除已标记的 AI 作品。"
+  },
+  "pixiv_default_tags": {
+    "description": "Pixiv 默认标签",
+    "type": "string",
+    "default": "",
+    "hint": "不在指令里写标签时使用。最多 3 组 AND 标签；每组内部可用 | 表示 OR，例如 白丝|黑丝。多组用空格或逗号分隔。"
+  },
+  "pixiv_aspect_ratio": {
+    "description": "Pixiv 长宽比筛选",
+    "type": "string",
+    "default": "",
+    "hint": "Lolicon v2 参数 aspectRatio，例如 lt1 竖图、gt1 横图、eq1 正方形，留空不筛选。"
   },
   "default_api_url": {
     "description": "旧版默认 API 地址",

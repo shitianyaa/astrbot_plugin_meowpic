@@ -20,6 +20,13 @@ LOG_PREFIX = "[MeowPic]"
 DEFAULT_LIMIT_MESSAGE = "冲的太快了喵~"
 DEFAULT_TIMEOUT_SECONDS = 15.0
 DEFAULT_CATEGORY = "meinv"
+PIXIV_LOLICON_API_URL = "https://api.lolicon.app/setu/v2"
+PIXIV_LEGACY_MOSSIA_API_URL = (
+    "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re"
+)
+PIXIV_ALLOWED_SIZES = {"original", "regular", "small", "thumb", "mini"}
+PIXIV_MAX_TAG_GROUPS = 3
+FALSE_STRINGS = {"", "0", "false", "none", "null", "off", "no"}
 IMAGE_CATEGORIES = {
     "meinv": {
         "label": "随机小姐姐",
@@ -47,9 +54,9 @@ IMAGE_CATEGORIES = {
         "default_url": "https://v2.xxapi.cn/api/jk",
     },
     "pixiv": {
-        "label": "Pixiv 非 R18",
+        "label": "Pixiv",
         "config_key": "api_pixiv_url",
-        "default_url": "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re",
+        "default_url": PIXIV_LOLICON_API_URL,
     },
 }
 CATEGORY_ALIASES = {
@@ -120,8 +127,8 @@ class UserFacingError(Exception):
 @register(
     "astrbot_plugin_meowpic",
     "Sham1k0",
-    "多分类随机图片插件，支持自定义 API 与 API Key",
-    "1.2.1",
+    "多分类随机图片插件，支持 Pixiv 标签、自定义 API 与 API Key",
+    "1.3.0",
 )
 class MeowPicPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -175,9 +182,17 @@ class MeowPicPlugin(Star):
             yield result
 
     @filter.command("pixiv", alias={"px", "p站", "p站图", "pixiv非r18"})
-    async def cmd_pixiv(self, event: AstrMessageEvent):
-        """随机返回一张 Pixiv 非 R18 图片"""
-        async for result in self._yield_random_image(event, "pixiv"):
+    async def cmd_pixiv(
+        self,
+        event: AstrMessageEvent,
+        tag1: str = "",
+        tag2: str = "",
+        tag3: str = "",
+    ):
+        """随机返回一张 Pixiv 图片，可附加最多 3 组标签"""
+        async for result in self._yield_random_image(
+            event, "pixiv", self._normalize_pixiv_tags(tag1, tag2, tag3)
+        ):
             yield result
 
     @filter.command_group("meowpic", alias={"喵图"})
@@ -186,13 +201,25 @@ class MeowPicPlugin(Star):
         pass
 
     @meowpic.command("get", alias={"pic", "来一张"})
-    async def cmd_get(self, event: AstrMessageEvent, category: str = ""):
+    async def cmd_get(
+        self,
+        event: AstrMessageEvent,
+        category: str = "",
+        tag1: str = "",
+        tag2: str = "",
+        tag3: str = "",
+    ):
         """随机返回一张图片"""
         category_key = self._resolve_category(category or DEFAULT_CATEGORY)
         if not category_key:
             yield event.plain_result(self._category_usage("未知分类"))
             return
-        async for result in self._yield_random_image(event, category_key):
+        pixiv_tags = (
+            self._normalize_pixiv_tags(tag1, tag2, tag3)
+            if category_key == "pixiv"
+            else []
+        )
+        async for result in self._yield_random_image(event, category_key, pixiv_tags):
             yield result
 
     @meowpic.command("baisi", alias={"白丝", "bs"})
@@ -220,9 +247,17 @@ class MeowPicPlugin(Star):
             yield result
 
     @meowpic.command("pixiv", alias={"px", "p站", "p站图", "pixiv非r18"})
-    async def cmd_get_pixiv(self, event: AstrMessageEvent):
-        """随机返回一张 Pixiv 非 R18 图片"""
-        async for result in self._yield_random_image(event, "pixiv"):
+    async def cmd_get_pixiv(
+        self,
+        event: AstrMessageEvent,
+        tag1: str = "",
+        tag2: str = "",
+        tag3: str = "",
+    ):
+        """随机返回一张 Pixiv 图片，可附加最多 3 组标签"""
+        async for result in self._yield_random_image(
+            event, "pixiv", self._normalize_pixiv_tags(tag1, tag2, tag3)
+        ):
             yield result
 
     @meowpic.command("setapi")
@@ -351,6 +386,16 @@ class MeowPicPlugin(Star):
                 f"{self._category_label(key)}: {self._mask_url(api_url)} "
                 f"({source}, Key {'已配置' if api_key else '未配置'})"
             )
+            if key == "pixiv" and self._is_lolicon_v2_url(api_url):
+                default_tags = " ".join(self._get_pixiv_default_tags()) or "无"
+                lines.append(
+                    "Pixiv 参数: "
+                    f"r18={self._get_int('pixiv_r18', 0, 0, 2)}, "
+                    f"size={','.join(self._get_pixiv_sizes())}, "
+                    f"proxy={self._get_str('pixiv_proxy', 'i.pixiv.re') or '无'}, "
+                    f"excludeAI={self._get_bool('pixiv_exclude_ai', True)}, "
+                    f"默认标签={default_tags}"
+                )
         yield event.plain_result("\n".join(lines))
 
     @meowpic.command("help")
@@ -360,8 +405,9 @@ class MeowPicPlugin(Star):
             "喵图姬指令\n"
             "/mm /小姐姐 /美女           随机小姐姐\n"
             "/白丝 /黑丝 /二次元 /jk      指定分类来一张\n"
-            "/pixiv /p站 /px              Pixiv 非 R18\n"
-            "/meowpic get [分类]          随机来一张\n"
+            "/pixiv /p站 /px [标签...]     Pixiv 随机图，默认非 R18\n"
+            "/meowpic get [分类] [标签...] 随机来一张\n"
+            "/meowpic pixiv [标签...]      Pixiv 按标签随机\n"
             "/meowpic setapi [分类] <URL> 设置个人分类 API\n"
             "/meowpic setkey [分类] <Key> 设置 API Key\n"
             "/meowpic clearkey [分类]     清除 API Key\n"
@@ -369,7 +415,12 @@ class MeowPicPlugin(Star):
             "/meowpic status [分类]       查看当前配置"
         )
 
-    async def _yield_random_image(self, event: AstrMessageEvent, category: str):
+    async def _yield_random_image(
+        self,
+        event: AstrMessageEvent,
+        category: str,
+        pixiv_tags: list[str] | None = None,
+    ):
         if not self._record_request(event):
             yield event.plain_result(
                 self.config.get("rate_limit_message", DEFAULT_LIMIT_MESSAGE)
@@ -379,7 +430,9 @@ class MeowPicPlugin(Star):
 
         temp_path: str | None = None
         try:
-            image_ref, temp_path = await self._fetch_image_for_event(event, category)
+            image_ref, temp_path = await self._fetch_image_for_event(
+                event, category, pixiv_tags or []
+            )
             yield event.image_result(image_ref)
         except UserFacingError as e:
             yield event.plain_result(str(e))
@@ -391,13 +444,18 @@ class MeowPicPlugin(Star):
                 self._cleanup_temp_file(temp_path)
 
     async def _fetch_image_for_event(
-        self, event: AstrMessageEvent, category: str
+        self,
+        event: AstrMessageEvent,
+        category: str,
+        pixiv_tags: list[str],
     ) -> tuple[str, str | None]:
         user_conf = await self._get_user_config(self._get_user_key(event))
         api_url, _ = self._get_category_api_url(category, user_conf)
         api_key = self._get_category_api_key(category, user_conf)
 
-        request_url, headers = self._build_request(api_url, api_key)
+        request_url, headers = self._build_request(
+            api_url, api_key, category, pixiv_tags
+        )
         timeout = aiohttp.ClientTimeout(
             total=self._get_float(
                 "request_timeout_seconds", DEFAULT_TIMEOUT_SECONDS, 3.0, 120.0
@@ -470,13 +528,56 @@ class MeowPicPlugin(Star):
             raise UserFacingError(f"图片下载失败: 返回类型 {last_content_type}")
         raise UserFacingError("图片下载失败")
 
-    def _build_request(self, api_url: str, api_key: str) -> tuple[str, dict[str, str]]:
+    def _build_request(
+        self,
+        api_url: str,
+        api_key: str,
+        category: str = "",
+        pixiv_tags: list[str] | None = None,
+    ) -> tuple[str, dict[str, str]]:
         if api_key and "{api_key}" in api_url:
-            return (
-                api_url.replace("{api_key}", quote(api_key, safe="")),
-                self._browser_headers(),
-            )
+            api_url = api_url.replace("{api_key}", quote(api_key, safe=""))
+
+        if category == "pixiv" and self._is_lolicon_v2_url(api_url):
+            api_url = self._build_lolicon_v2_url(api_url, pixiv_tags or [])
+
         return api_url, self._browser_headers()
+
+    def _build_lolicon_v2_url(self, api_url: str, pixiv_tags: list[str]) -> str:
+        parsed = urlparse(api_url)
+        query = parse_qsl(parsed.query, keep_blank_values=True)
+        existing_keys = {key.lower() for key, _ in query}
+
+        def add_if_missing(key: str, value: str):
+            if key.lower() in existing_keys or value == "":
+                return
+            query.append((key, value))
+            existing_keys.add(key.lower())
+
+        add_if_missing("r18", str(self._get_int("pixiv_r18", 0, 0, 2)))
+        add_if_missing("num", "1")
+
+        if "size" not in existing_keys:
+            for size in self._get_pixiv_sizes():
+                query.append(("size", size))
+            existing_keys.add("size")
+
+        if "proxy" not in existing_keys:
+            query.append(("proxy", self._get_str("pixiv_proxy", "i.pixiv.re")))
+            existing_keys.add("proxy")
+        add_if_missing(
+            "excludeAI",
+            "true" if self._get_bool("pixiv_exclude_ai", True) else "false",
+        )
+        add_if_missing("aspectRatio", self._get_str("pixiv_aspect_ratio", ""))
+
+        tags = pixiv_tags or self._get_pixiv_default_tags()
+        has_url_tags = any(key.lower() == "tag" for key, _ in query)
+        if pixiv_tags or not has_url_tags:
+            for tag in tags:
+                query.append(("tag", tag))
+
+        return urlunparse(parsed._replace(query=urlencode(query)))
 
     def _download_header_attempts(
         self, image_url: str, referer_url: str = ""
@@ -535,6 +636,13 @@ class MeowPicPlugin(Star):
             payload = json.loads(raw_text)
         except json.JSONDecodeError:
             return None
+
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, str) and error.strip():
+                raise UserFacingError(f"图片 API 返回错误: {error.strip()}")
+            if isinstance(payload.get("data"), list) and not payload["data"]:
+                raise UserFacingError("没有找到符合条件的图片，可以换个标签试试")
 
         candidates = self._collect_image_urls(payload, from_hint=False)
         if not candidates:
@@ -657,6 +765,8 @@ class MeowPicPlugin(Star):
         if isinstance(api_urls, dict):
             user_url = (api_urls.get(category, "") or "").strip()
             if user_url:
+                if category == "pixiv" and user_url == PIXIV_LEGACY_MOSSIA_API_URL:
+                    return IMAGE_CATEGORIES[category]["default_url"], "内置默认"
                 return user_url, "用户配置"
 
         # 兼容旧版个人配置：旧的 api_url 只作为“随机小姐姐”分类的覆盖。
@@ -668,6 +778,8 @@ class MeowPicPlugin(Star):
         meta = IMAGE_CATEGORIES[category]
         config_url = (self.config.get(meta["config_key"], "") or "").strip()
         if config_url:
+            if category == "pixiv" and config_url == PIXIV_LEGACY_MOSSIA_API_URL:
+                return meta["default_url"], "内置默认"
             return config_url, "插件配置"
 
         if category == DEFAULT_CATEGORY:
@@ -785,10 +897,63 @@ class MeowPicPlugin(Star):
             return default
         return value if lo <= value <= hi else default
 
+    def _get_bool(self, key: str, default: bool) -> bool:
+        value = self.config.get(key, default)
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        return str(value).strip().lower() not in FALSE_STRINGS
+
+    def _get_str(self, key: str, default: str = "") -> str:
+        value = self.config.get(key, default)
+        if value is None:
+            return default
+        return str(value).strip()
+
+    def _get_pixiv_sizes(self) -> list[str]:
+        sizes: list[str] = []
+        for value in self._split_list_value(self._get_str("pixiv_size", "regular")):
+            normalized = value.lower()
+            if normalized in PIXIV_ALLOWED_SIZES and normalized not in sizes:
+                sizes.append(normalized)
+        return sizes or ["regular"]
+
+    def _get_pixiv_default_tags(self) -> list[str]:
+        return self._normalize_pixiv_tags(self._get_str("pixiv_default_tags", ""))
+
+    def _normalize_pixiv_tags(self, *values: str) -> list[str]:
+        tags: list[str] = []
+        for value in values:
+            for item in self._split_list_value(value):
+                if item and item not in tags:
+                    tags.append(item)
+                if len(tags) >= PIXIV_MAX_TAG_GROUPS:
+                    return tags
+        return tags
+
+    @staticmethod
+    def _split_list_value(value: str) -> list[str]:
+        text = (value or "").strip()
+        if not text:
+            return []
+        for sep in ("\r\n", "\n", "，", "、", "；", ";", ","):
+            text = text.replace(sep, " ")
+        return [item.strip() for item in text.split() if item.strip()]
+
     @staticmethod
     def _is_http_url(value: str) -> bool:
         parsed = urlparse(value)
         return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+    @staticmethod
+    def _is_lolicon_v2_url(value: str) -> bool:
+        parsed = urlparse(value)
+        return (
+            parsed.scheme in {"http", "https"}
+            and (parsed.hostname or "").lower() == "api.lolicon.app"
+            and parsed.path.rstrip("/") == "/setu/v2"
+        )
 
     @staticmethod
     def _looks_like_image_url(value: str) -> bool:
