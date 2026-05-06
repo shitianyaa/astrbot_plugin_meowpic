@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 - 2026-05-06
+
+- Pixiv/API 请求超时时返回更明确的用户提示，避免记录为未知异常。
+- Pixiv 图片地址支持 `i.pixiv.re` 与 `i.pximg.net` 之间自动兜底尝试，降低反代超时影响。
+
 ## 1.3.0 - 2026-05-06
 
 - Pixiv 默认接口切换为 Lolicon v2：`https://api.lolicon.app/setu/v2`。

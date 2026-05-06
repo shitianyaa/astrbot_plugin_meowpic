@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
@@ -128,7 +129,7 @@ class UserFacingError(Exception):
     "astrbot_plugin_meowpic",
     "Sham1k0",
     "多分类随机图片插件，支持 Pixiv 标签、自定义 API 与 API Key",
-    "1.3.0",
+    "1.3.1",
 )
 class MeowPicPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -436,6 +437,8 @@ class MeowPicPlugin(Star):
             yield event.image_result(image_ref)
         except UserFacingError as e:
             yield event.plain_result(str(e))
+        except asyncio.TimeoutError:
+            yield event.plain_result("图片请求超时了喵，可以稍后再试或调大请求超时")
         except Exception as e:
             logger.error(f"{LOG_PREFIX} fetch image failed: {e}", exc_info=True)
             yield event.plain_result("图片获取失败了喵，请稍后再试")
@@ -496,36 +499,53 @@ class MeowPicPlugin(Star):
         last_status: int | None = None
         last_content_type = ""
 
-        for headers in self._download_header_attempts(image_url, referer_url):
-            async with session.get(
-                image_url,
-                headers=headers,
-                timeout=timeout,
-                allow_redirects=True,
-            ) as resp:
-                if resp.status >= 400:
-                    last_status = resp.status
-                    if resp.status in (401, 403, 429):
-                        continue
-                    raise UserFacingError(f"图片下载失败: HTTP {resp.status}")
+        timed_out = False
+        client_error = ""
 
-                content_type = (
-                    resp.headers.get("Content-Type", "").split(";", 1)[0].lower()
-                )
-                image_bytes = await resp.read()
-                last_content_type = content_type
-                if image_bytes and (
-                    content_type.startswith("image/")
-                    or self._looks_like_image_url(str(resp.url))
-                ):
-                    return self._write_temp_image(
-                        image_bytes, content_type, str(resp.url)
-                    )
+        for candidate_url in self._image_url_attempts(image_url):
+            for headers in self._download_header_attempts(candidate_url, referer_url):
+                try:
+                    async with session.get(
+                        candidate_url,
+                        headers=headers,
+                        timeout=timeout,
+                        allow_redirects=True,
+                    ) as resp:
+                        if resp.status >= 400:
+                            last_status = resp.status
+                            if resp.status in (401, 403, 429):
+                                continue
+                            raise UserFacingError(f"图片下载失败: HTTP {resp.status}")
+
+                        content_type = (
+                            resp.headers.get("Content-Type", "")
+                            .split(";", 1)[0]
+                            .lower()
+                        )
+                        image_bytes = await resp.read()
+                        last_content_type = content_type
+                        if image_bytes and (
+                            content_type.startswith("image/")
+                            or self._looks_like_image_url(str(resp.url))
+                        ):
+                            return self._write_temp_image(
+                                image_bytes, content_type, str(resp.url)
+                            )
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    continue
+                except aiohttp.ClientError as e:
+                    client_error = str(e)
+                    continue
 
         if last_status is not None:
             raise UserFacingError(f"图片下载失败: HTTP {last_status}")
         if last_content_type:
             raise UserFacingError(f"图片下载失败: 返回类型 {last_content_type}")
+        if timed_out:
+            raise UserFacingError("图片下载超时了喵，可以调大请求超时或换一个 Pixiv 反代")
+        if client_error:
+            raise UserFacingError(f"图片下载失败: {client_error}")
         raise UserFacingError("图片下载失败")
 
     def _build_request(
@@ -606,6 +626,63 @@ class MeowPicPlugin(Star):
             seen.add(key)
             attempts.append(self._browser_headers(referer))
         return attempts
+
+    def _image_url_attempts(self, image_url: str) -> list[str]:
+        attempts = [image_url]
+
+        direct_url = self._pixiv_direct_image_url(image_url)
+        if direct_url and direct_url not in attempts:
+            attempts.append(direct_url)
+
+        proxied_url = self._pixiv_proxy_image_url(image_url)
+        if proxied_url and proxied_url not in attempts:
+            attempts.append(proxied_url)
+
+        return attempts
+
+    @staticmethod
+    def _pixiv_direct_image_url(value: str) -> str:
+        parsed = urlparse(value)
+        hostname = (parsed.hostname or "").lower()
+        if hostname in {"", "i.pximg.net"} or hostname.endswith(".pximg.net"):
+            return ""
+
+        if parsed.path.startswith(("/img-original/", "/img-master/", "/c/")):
+            return urlunparse(parsed._replace(netloc="i.pximg.net"))
+        return ""
+
+    def _pixiv_proxy_image_url(self, value: str) -> str:
+        parsed = urlparse(value)
+        hostname = (parsed.hostname or "").lower()
+        if hostname != "i.pximg.net" and not hostname.endswith(".pximg.net"):
+            return ""
+
+        proxy = self._get_str("pixiv_proxy", "i.pixiv.re")
+        if proxy.lower() in FALSE_STRINGS:
+            return ""
+
+        if "{{path}}" in proxy:
+            image_path = parsed.path.lstrip("/")
+            proxy = proxy.replace("{{path}}", image_path)
+            proxy_parsed = urlparse(proxy if "://" in proxy else f"https://{proxy}")
+            if proxy_parsed.scheme in {"http", "https"} and proxy_parsed.netloc:
+                return urlunparse(proxy_parsed._replace(query=parsed.query))
+            return ""
+
+        proxy_parsed = urlparse(proxy if "://" in proxy else f"https://{proxy}")
+        if proxy_parsed.scheme not in {"http", "https"} or not proxy_parsed.netloc:
+            return ""
+
+        proxy_path = proxy_parsed.path.rstrip("/")
+        image_path = parsed.path
+        path = f"{proxy_path}{image_path}" if proxy_path else image_path
+        return urlunparse(
+            parsed._replace(
+                scheme=proxy_parsed.scheme,
+                netloc=proxy_parsed.netloc,
+                path=path,
+            )
+        )
 
     @staticmethod
     def _browser_headers(referer: str | None = None) -> dict[str, str]:

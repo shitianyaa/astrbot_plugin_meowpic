@@ -128,6 +128,8 @@ Pixiv 分类默认使用 Lolicon v2。直接发送：
 
 最多支持 3 组标签；每组之间是 AND，每组内部可用 `|` 表示 OR。插件会自动拼成 Lolicon v2 的重复 `tag` 参数，并默认使用 `r18=0&num=1&size=regular&proxy=i.pixiv.re&excludeAI=true`。
 
+如果 Pixiv 图片下载超时，可以把 `request_timeout_seconds` 调到 `30` 或 `60`，或在 `pixiv_proxy` 里换一个可用的 Pixiv 图片反代。插件会在 `i.pixiv.re` 与原始 `i.pximg.net` 地址之间自动兜底尝试。
+
 ## 限流
 
 默认同一用户 60 秒内最多 3 次，第 4 次提示 `冲的太快了喵~`。可在配置里关闭或调整。
