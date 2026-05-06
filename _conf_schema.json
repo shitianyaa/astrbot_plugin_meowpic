@@ -29,6 +29,12 @@
     "default": "https://v2.xxapi.cn/api/jk",
     "hint": "/jk 或 /meowpic jk 使用这个接口。"
   },
+  "api_pixiv_url": {
+    "description": "Pixiv 非 R18 API",
+    "type": "string",
+    "default": "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re",
+    "hint": "/pixiv、/p站、/px 或 /meowpic pixiv 使用这个接口。默认带 r18Type=0。"
+  },
   "default_api_url": {
     "description": "旧版默认 API 地址",
     "type": "string",

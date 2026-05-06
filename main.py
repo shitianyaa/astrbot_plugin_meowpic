@@ -46,6 +46,11 @@ IMAGE_CATEGORIES = {
         "config_key": "api_jk_url",
         "default_url": "https://v2.xxapi.cn/api/jk",
     },
+    "pixiv": {
+        "label": "Pixiv 非 R18",
+        "config_key": "api_pixiv_url",
+        "default_url": "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re",
+    },
 }
 CATEGORY_ALIASES = {
     "meinv": "meinv",
@@ -64,6 +69,11 @@ CATEGORY_ALIASES = {
     "二次元": "acg",
     "动漫": "acg",
     "jk": "jk",
+    "pixiv": "pixiv",
+    "px": "pixiv",
+    "p站": "pixiv",
+    "p站图": "pixiv",
+    "pixiv非r18": "pixiv",
 }
 DEFAULT_API_URL = IMAGE_CATEGORIES[DEFAULT_CATEGORY]["default_url"]
 DEFAULT_USER_AGENT = (
@@ -111,7 +121,7 @@ class UserFacingError(Exception):
     "astrbot_plugin_meowpic",
     "Sham1k0",
     "多分类随机图片插件，支持自定义 API 与 API Key",
-    "1.1.0",
+    "1.2.1",
 )
 class MeowPicPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -164,6 +174,12 @@ class MeowPicPlugin(Star):
         async for result in self._yield_random_image(event, "jk"):
             yield result
 
+    @filter.command("pixiv", alias={"px", "p站", "p站图", "pixiv非r18"})
+    async def cmd_pixiv(self, event: AstrMessageEvent):
+        """随机返回一张 Pixiv 非 R18 图片"""
+        async for result in self._yield_random_image(event, "pixiv"):
+            yield result
+
     @filter.command_group("meowpic", alias={"喵图"})
     def meowpic(self):
         """喵图姬配置指令组"""
@@ -201,6 +217,12 @@ class MeowPicPlugin(Star):
     async def cmd_get_jk(self, event: AstrMessageEvent):
         """随机返回一张 JK 图片"""
         async for result in self._yield_random_image(event, "jk"):
+            yield result
+
+    @meowpic.command("pixiv", alias={"px", "p站", "p站图", "pixiv非r18"})
+    async def cmd_get_pixiv(self, event: AstrMessageEvent):
+        """随机返回一张 Pixiv 非 R18 图片"""
+        async for result in self._yield_random_image(event, "pixiv"):
             yield result
 
     @meowpic.command("setapi")
@@ -338,6 +360,7 @@ class MeowPicPlugin(Star):
             "喵图姬指令\n"
             "/mm /小姐姐 /美女           随机小姐姐\n"
             "/白丝 /黑丝 /二次元 /jk      指定分类来一张\n"
+            "/pixiv /p站 /px              Pixiv 非 R18\n"
             "/meowpic get [分类]          随机来一张\n"
             "/meowpic setapi [分类] <URL> 设置个人分类 API\n"
             "/meowpic setkey [分类] <Key> 设置 API Key\n"
@@ -470,6 +493,8 @@ class MeowPicPlugin(Star):
                 self._origin_url(image_url),
                 self._origin_url(referer_url),
             ]
+            if self._is_pixiv_direct_image_url(image_url):
+                referers.append("https://www.pixiv.net/")
 
         seen: set[str] = set()
         attempts: list[dict[str, str]] = []
@@ -769,6 +794,11 @@ class MeowPicPlugin(Star):
     def _looks_like_image_url(value: str) -> bool:
         path = urlparse(value).path.lower()
         return path.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"))
+
+    @staticmethod
+    def _is_pixiv_direct_image_url(value: str) -> bool:
+        hostname = urlparse(value).hostname or ""
+        return hostname == "i.pximg.net" or hostname.endswith(".pximg.net")
 
     @staticmethod
     def _write_temp_image(
