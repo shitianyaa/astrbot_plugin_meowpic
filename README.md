@@ -1,5 +1,7 @@
 # 喵图姬
 
+![访问量](https://visitor-badge.laobi.icu/badge?page_id=shitianyaa.astrbot_plugin_meowpic)
+
 AstrBot 随机图片插件。支持多个默认 API 分类，也支持用户在聊天里覆盖自己的分类 API 和 API Key。
 
 ## 默认分类
