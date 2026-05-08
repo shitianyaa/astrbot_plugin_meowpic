@@ -4,6 +4,8 @@ from __future__ import annotations
 KV_USER_CONFIGS = "user_configs"
 LOG_PREFIX = "[MeowPic]"
 DEFAULT_LIMIT_MESSAGE = "冲的太快了喵~"
+DEFAULT_RECALL_SUCCESS_MESSAGE = "哦齁齁哦哦哦~"
+DEFAULT_RECALL_EXPIRED_MESSAGE = "快@管理员来救一下哇 喵~"
 DEFAULT_TIMEOUT_SECONDS = 15.0
 DEFAULT_CATEGORY = "meinv"
 PIXIV_LOLICON_API_URL = "https://api.lolicon.app/setu/v2"

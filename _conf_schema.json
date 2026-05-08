@@ -96,6 +96,48 @@
     "default": "auto",
     "hint": "用于处理图床 HTTP 403 防盗链。auto 会自动尝试无 Referer、图片域名 Referer、API 域名 Referer；none 表示不发送 Referer；也可以填写固定地址，例如 https://example.com/"
   },
+  "recall_whitelist_user_ids": {
+    "description": "图片撤回白名单用户 ID",
+    "type": "string",
+    "default": "",
+    "hint": "默认只有管理员可通过监听词撤回机器人发出的图片；这里填写的用户也可使用。多个 QQ 号可用逗号、空格或换行分隔。"
+  },
+  "recall_allow_anyone": {
+    "description": "允许所有人撤回机器人图片",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，任何人都可以通过监听词撤回机器人发出的图片。只能撤回机器人图片，不能撤回其他人的消息。"
+  },
+  "recall_trigger_text": {
+    "description": "图片撤回监听词",
+    "type": "string",
+    "default": "hentai",
+    "hint": "收到完全匹配此文本的普通消息时触发图片撤回。默认 hentai，不需要斜杠。"
+  },
+  "recall_success_message": {
+    "description": "图片撤回成功回复",
+    "type": "string",
+    "default": "哦齁齁哦哦哦~",
+    "hint": "成功撤回图片后，机器人回复的文字。留空则撤回成功后不额外回复。"
+  },
+  "recall_expired_message": {
+    "description": "图片超过撤回窗口回复",
+    "type": "string",
+    "default": "快@管理员来救一下哇 喵~",
+    "hint": "找到机器人发出的图片但已超过撤回窗口、无法自动撤回时回复的文字。"
+  },
+  "recall_window_seconds": {
+    "description": "图片撤回窗口（秒）",
+    "type": "int",
+    "default": 120,
+    "hint": "默认只查找最近 120 秒内机器人发出的图片。QQ 普通消息通常只能在 2 分钟内撤回，范围 1-3600。"
+  },
+  "recall_history_limit": {
+    "description": "图片撤回历史查找数量",
+    "type": "int",
+    "default": 30,
+    "hint": "未引用消息时，从最近多少条历史消息里查找机器人发出的上一张图片。范围 5-100。"
+  },
   "rate_limit_enabled": {
     "description": "启用限流",
     "type": "bool",

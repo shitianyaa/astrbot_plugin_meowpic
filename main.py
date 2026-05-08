@@ -11,9 +11,12 @@ from astrbot.api.star import Context, Star, register
 try:
     from .errors import UserFacingError
     from .image_service import ImageServiceMixin
+    from .recall_service import MeowPicRecallService
     from .settings import (
         DEFAULT_CATEGORY,
         DEFAULT_LIMIT_MESSAGE,
+        DEFAULT_RECALL_EXPIRED_MESSAGE,
+        DEFAULT_RECALL_SUCCESS_MESSAGE,
         IMAGE_CATEGORIES,
         KV_USER_CONFIGS,
         LOG_PREFIX,
@@ -22,9 +25,12 @@ try:
 except ImportError:
     from errors import UserFacingError
     from image_service import ImageServiceMixin
+    from recall_service import MeowPicRecallService
     from settings import (
         DEFAULT_CATEGORY,
         DEFAULT_LIMIT_MESSAGE,
+        DEFAULT_RECALL_EXPIRED_MESSAGE,
+        DEFAULT_RECALL_SUCCESS_MESSAGE,
         IMAGE_CATEGORIES,
         KV_USER_CONFIGS,
         LOG_PREFIX,
@@ -35,8 +41,8 @@ except ImportError:
 @register(
     "astrbot_plugin_meowpic",
     "Sham1k0",
-    "多分类随机图片插件，支持 Pixiv 标签、自定义 API 与 API Key",
-    "1.3.1",
+    "多分类随机图片插件，支持 Pixiv 标签、自定义 API、API Key 与图片撤回",
+    "1.4.0",
 )
 class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -44,6 +50,7 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         self.config = config
         self.session: aiohttp.ClientSession | None = None
         self._request_log: dict[str, list[float]] = {}
+        self.recall_service = MeowPicRecallService(context)
 
     async def initialize(self):
         self._ensure_session()
@@ -101,6 +108,14 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         async for result in self._yield_random_image(
             event, "pixiv", self._normalize_pixiv_tags(tag1, tag2, tag3)
         ):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def on_hentai_recall(self, event: AstrMessageEvent):
+        """监听 hentai 并撤回机器人发出的图片"""
+        if not self._is_recall_trigger(event):
+            return
+        async for result in self._yield_recall_image(event):
             yield result
 
     @filter.command_group("meowpic", alias={"喵图"})
@@ -322,6 +337,87 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
             "/meowpic clear [分类]        清除个人配置\n"
             "/meowpic status [分类]       查看当前配置"
         )
+
+    async def _yield_recall_image(self, event: AstrMessageEvent):
+        if event.get_platform_name() != "aiocqhttp":
+            yield event.plain_result("当前平台暂不支持撤回喵，仅支持 aiocqhttp/OneBot。")
+            return
+
+        if not self._can_use_recall_image(event):
+            yield event.plain_result("此指令仅管理员或喵图撤回白名单用户可用喵。")
+            return
+
+        recall_window_seconds = self._get_int("recall_window_seconds", 120, 1, 3600)
+        history_limit = self._get_int("recall_history_limit", 30, 5, 100)
+
+        ok, message = await self.recall_service.recall_last_bot_image(
+            event, history_limit, recall_window_seconds
+        )
+
+        if ok:
+            success_message = self._get_str(
+                "recall_success_message", DEFAULT_RECALL_SUCCESS_MESSAGE
+            )
+            if success_message:
+                yield event.plain_result(success_message)
+            return
+
+        if message == "expired":
+            message = self._get_str(
+                "recall_expired_message", DEFAULT_RECALL_EXPIRED_MESSAGE
+            )
+        yield event.plain_result(message)
+
+    def _can_use_recall_image(self, event: AstrMessageEvent) -> bool:
+        if self._is_admin(event):
+            return True
+        sender_id = self._get_sender_id(event)
+        if sender_id and sender_id in self._get_recall_whitelist_user_ids():
+            return True
+        return self._get_bool("recall_allow_anyone", False)
+
+    def _get_recall_whitelist_user_ids(self) -> set[str]:
+        value = self._get_str("recall_whitelist_user_ids", "")
+        return set(self._split_list_value(value))
+
+    def _is_recall_trigger(self, event: AstrMessageEvent) -> bool:
+        trigger = self._get_str("recall_trigger_text", "hentai").lower()
+        message = str(getattr(event, "message_str", "") or "").strip().lower()
+        return bool(trigger and message == trigger)
+
+    def _is_admin(self, event: AstrMessageEvent) -> bool:
+        direct = self._safe_call(event, "is_admin")
+        if isinstance(direct, bool):
+            return direct
+        if direct is not None:
+            return str(direct).strip().lower() in {"1", "true", "yes", "admin", "owner"}
+
+        for value in self._possible_sender_roles(event):
+            role = str(value).strip().lower()
+            if role in {"admin", "administrator", "owner", "superuser", "管理员", "群主"}:
+                return True
+        return False
+
+    def _possible_sender_roles(self, event: AstrMessageEvent):
+        role = getattr(event, "role", None)
+        if role:
+            yield role
+
+        message_obj = getattr(event, "message_obj", None)
+        sender = getattr(message_obj, "sender", None)
+        for attr in ("role", "permission"):
+            value = getattr(sender, attr, None)
+            if value:
+                yield value
+
+        raw = getattr(message_obj, "raw_message", None)
+        if isinstance(raw, dict):
+            raw_sender = raw.get("sender")
+            if isinstance(raw_sender, dict):
+                for key in ("role", "permission"):
+                    value = raw_sender.get(key)
+                    if value:
+                        yield value
 
     async def _yield_random_image(
         self,
