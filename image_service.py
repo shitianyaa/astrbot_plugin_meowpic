@@ -5,6 +5,7 @@ import json
 import os
 import random
 import tempfile
+import time
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
@@ -66,6 +67,8 @@ class ImageServiceMixin:
                 image_bytes = await resp.read()
                 if not image_bytes:
                     raise UserFacingError("图片 API 返回了空图片")
+                if not self._looks_like_image_bytes(image_bytes):
+                    raise UserFacingError("图片 API 返回的内容不是有效图片")
                 temp_path = self._write_temp_image(
                     image_bytes, content_type, str(resp.url)
                 )
@@ -90,14 +93,23 @@ class ImageServiceMixin:
 
         timed_out = False
         client_error = ""
+        invalid_image_response = False
+        total_timeout = timeout.total
+        if total_timeout is None:
+            total_timeout = DEFAULT_TIMEOUT_SECONDS
+        deadline = time.monotonic() + max(float(total_timeout), 0.1)
 
         for candidate_url in self._image_url_attempts(image_url):
             for headers in self._download_header_attempts(candidate_url, referer_url):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
                 try:
                     async with session.get(
                         candidate_url,
                         headers=headers,
-                        timeout=timeout,
+                        timeout=aiohttp.ClientTimeout(total=remaining),
                         allow_redirects=True,
                     ) as resp:
                         if resp.status >= 400:
@@ -113,22 +125,26 @@ class ImageServiceMixin:
                         )
                         image_bytes = await resp.read()
                         last_content_type = content_type
-                        if image_bytes and (
-                            content_type.startswith("image/")
-                            or self._looks_like_image_url(str(resp.url))
-                        ):
+                        if image_bytes and self._looks_like_image_bytes(image_bytes):
                             return self._write_temp_image(
                                 image_bytes, content_type, str(resp.url)
                             )
+                        if image_bytes:
+                            invalid_image_response = True
                 except asyncio.TimeoutError:
                     timed_out = True
                     continue
                 except aiohttp.ClientError as e:
                     client_error = str(e)
                     continue
+            if time.monotonic() >= deadline:
+                break
 
         if last_status is not None:
             raise UserFacingError(f"图片下载失败: HTTP {last_status}")
+        if invalid_image_response:
+            detail = f" ({last_content_type})" if last_content_type else ""
+            raise UserFacingError(f"图片下载失败: 返回内容不是有效图片{detail}")
         if last_content_type:
             raise UserFacingError(f"图片下载失败: 返回类型 {last_content_type}")
         if timed_out:
@@ -173,8 +189,9 @@ class ImageServiceMixin:
                 query.append(("size", size))
             existing_keys.add("size")
 
-        if "proxy" not in existing_keys:
-            query.append(("proxy", self._get_str("pixiv_proxy", "i.pixiv.re")))
+        proxy = self._get_str("pixiv_proxy", "i.pixiv.re")
+        if "proxy" not in existing_keys and proxy.lower() not in FALSE_STRINGS:
+            query.append(("proxy", proxy))
             existing_keys.add("proxy")
         add_if_missing(
             "excludeAI",
@@ -193,7 +210,7 @@ class ImageServiceMixin:
     def _download_header_attempts(
         self, image_url: str, referer_url: str = ""
     ) -> list[dict[str, str]]:
-        configured = (self.config.get("image_referer", "auto") or "auto").strip()
+        configured = self._get_str("image_referer", "auto") or "auto"
 
         if configured.lower() in {"none", "off", "false", "0"}:
             referers: list[str | None] = [None]
@@ -279,7 +296,7 @@ class ImageServiceMixin:
     def _browser_headers(referer: str | None = None) -> dict[str, str]:
         headers = {
             "User-Agent": DEFAULT_USER_AGENT,
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept": "image/jpeg,image/png,image/gif,image/webp,image/bmp,image/*;q=0.8,*/*;q=0.5",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
@@ -298,7 +315,7 @@ class ImageServiceMixin:
     def _extract_image_url(self, raw_text: str, base_url: str) -> str | None:
         text = (raw_text or "").strip().strip('"').strip("'")
         if self._is_http_url(text):
-            return text
+            return urljoin(base_url, text)
 
         try:
             payload = json.loads(raw_text)
@@ -315,7 +332,10 @@ class ImageServiceMixin:
         candidates = self._collect_image_urls(payload, from_hint=False)
         if not candidates:
             return None
-        return urljoin(base_url, random.choice(candidates))
+        image_candidates = [
+            url for url in candidates if self._looks_like_image_url(url)
+        ]
+        return urljoin(base_url, random.choice(image_candidates or candidates))
 
     def _collect_image_urls(self, value: Any, from_hint: bool) -> list[str]:
         found: dict[str, None] = {}
@@ -350,13 +370,25 @@ class ImageServiceMixin:
         return list(found.keys())
 
     @staticmethod
+    def _looks_like_image_bytes(value: bytes) -> bool:
+        head = value[:32]
+        return (
+            head.startswith(b"\xff\xd8\xff")
+            or head.startswith(b"\x89PNG\r\n\x1a\n")
+            or head.startswith((b"GIF87a", b"GIF89a"))
+            or head.startswith(b"BM")
+            or (head.startswith(b"RIFF") and head[8:12] == b"WEBP")
+            or (head[4:8] == b"ftyp" and (b"avif" in head[8:] or b"avis" in head[8:]))
+        )
+
+    @staticmethod
     def _write_temp_image(
         image_bytes: bytes, content_type: str, source_url: str
     ) -> str:
         suffix = IMAGE_SUFFIX_BY_CONTENT_TYPE.get(content_type)
         if not suffix:
             source_path = urlparse(source_url).path.lower()
-            for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"):
+            for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"):
                 if source_path.endswith(ext):
                     suffix = ext
                     break

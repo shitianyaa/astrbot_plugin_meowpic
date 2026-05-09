@@ -52,6 +52,7 @@ IMAGE_SUFFIX_BY_CONTENT_TYPE = {
     "image/png": ".png",
     "image/gif": ".gif",
     "image/webp": ".webp",
+    "image/avif": ".avif",
     "image/bmp": ".bmp",
 }
 PREFERRED_IMAGE_KEYS = {

@@ -11,7 +11,7 @@ from astrbot.api.star import Context, Star, register
 try:
     from .errors import UserFacingError
     from .image_service import ImageServiceMixin
-    from .recall_service import MeowPicRecallService
+    from .recall_service import MeowPicRecallService, extract_reply_info
     from .settings import (
         DEFAULT_LIMIT_MESSAGE,
         DEFAULT_RECALL_EXPIRED_MESSAGE,
@@ -22,7 +22,7 @@ try:
 except ImportError:
     from errors import UserFacingError
     from image_service import ImageServiceMixin
-    from recall_service import MeowPicRecallService
+    from recall_service import MeowPicRecallService, extract_reply_info
     from settings import (
         DEFAULT_LIMIT_MESSAGE,
         DEFAULT_RECALL_EXPIRED_MESSAGE,
@@ -36,7 +36,7 @@ except ImportError:
     "astrbot_plugin_meowpic",
     "Sham1k0",
     "多分类随机图片插件，支持 Pixiv 标签、自定义 API、API Key 与图片撤回",
-    "1.4.0",
+    "1.4.1",
 )
 class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -44,6 +44,7 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         self.config = config
         self.session: aiohttp.ClientSession | None = None
         self._request_log: dict[str, list[float]] = {}
+        self._last_request_log_prune = 0.0
         self.recall_service = MeowPicRecallService(context)
 
     async def initialize(self):
@@ -90,7 +91,7 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         async for result in self._yield_random_image(event, "jk"):
             yield result
 
-    @filter.command("px")
+    @filter.command("px", alias={"pixiv", "p站"})
     async def cmd_pixiv(
         self,
         event: AstrMessageEvent,
@@ -130,12 +131,49 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
             "/二次元                     二次元\n"
             "/jk                         JK\n"
             "/px [标签1] [标签2] [标签3] Pixiv 随机图，默认非 R18\n"
+            "/pixiv [标签1] [标签2] [标签3] 同 /px\n"
+            "/p站 [标签1] [标签2] [标签3]    同 /px\n"
+            "/meowpic pixiv [标签...]     同 /px\n"
+            "/meowpic get pixiv [标签...] 同 /px\n"
             "/meowpic help                查看指令\n"
-            "hentai                      撤回最近 2 分钟内机器人发出的上一张图片"
+            "hentai                      回复图片时撤回该图，否则撤回最近 2 分钟内机器人图片"
         )
 
+    @meowpic.command("pixiv")
+    async def cmd_meowpic_pixiv(
+        self,
+        event: AstrMessageEvent,
+        tag1: str = "",
+        tag2: str = "",
+        tag3: str = "",
+    ):
+        """通过指令组返回 Pixiv 图片"""
+        async for result in self._yield_random_image(
+            event, "pixiv", self._normalize_pixiv_tags(tag1, tag2, tag3)
+        ):
+            yield result
+
+    @meowpic.command("get")
+    async def cmd_meowpic_get(
+        self,
+        event: AstrMessageEvent,
+        category: str = "",
+        tag1: str = "",
+        tag2: str = "",
+        tag3: str = "",
+    ):
+        """兼容 /meowpic get pixiv 标签"""
+        if category.strip().lower() not in {"pixiv", "px", "p站"}:
+            yield event.plain_result("用法：/meowpic get pixiv [标签1] [标签2] [标签3]")
+            return
+
+        async for result in self._yield_random_image(
+            event, "pixiv", self._normalize_pixiv_tags(tag1, tag2, tag3)
+        ):
+            yield result
+
     async def _yield_recall_image(self, event: AstrMessageEvent):
-        if event.get_platform_name() != "aiocqhttp":
+        if self._safe_call(event, "get_platform_name") != "aiocqhttp":
             yield event.plain_result(
                 "当前平台暂不支持撤回喵，仅支持 aiocqhttp/OneBot。"
             )
@@ -148,9 +186,15 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         recall_window_seconds = self._get_int("recall_window_seconds", 120, 1, 3600)
         history_limit = self._get_int("recall_history_limit", 30, 5, 100)
 
-        ok, message = await self.recall_service.recall_last_bot_image(
-            event, history_limit, recall_window_seconds
-        )
+        reply = extract_reply_info(event)
+        if reply.get("message_id"):
+            ok, message = await self.recall_service.recall_replied_image(
+                event, reply, recall_window_seconds
+            )
+        else:
+            ok, message = await self.recall_service.recall_last_bot_image(
+                event, history_limit, recall_window_seconds
+            )
 
         if ok:
             success_message = self._get_str(
@@ -232,7 +276,7 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
     ):
         if not self._record_request(event):
             yield event.plain_result(
-                self.config.get("rate_limit_message", DEFAULT_LIMIT_MESSAGE)
+                self._get_str("rate_limit_message", DEFAULT_LIMIT_MESSAGE)
                 or DEFAULT_LIMIT_MESSAGE
             )
             return

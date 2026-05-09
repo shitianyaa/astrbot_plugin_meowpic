@@ -24,12 +24,13 @@ except ImportError:
 
 class UserConfigMixin:
     def _record_request(self, event: AstrMessageEvent) -> bool:
-        if not self.config.get("rate_limit_enabled", True):
+        if not self._get_bool("rate_limit_enabled", True):
             return True
 
         max_count = self._get_int("rate_limit_count", 3, 1, 100)
         window = self._get_float("rate_limit_window_seconds", 60.0, 1.0, 3600.0)
         now = time.monotonic()
+        self._prune_request_log(now, window)
         user_key = self._get_user_key(event)
         recent = [ts for ts in self._request_log.get(user_key, []) if now - ts < window]
 
@@ -41,16 +42,29 @@ class UserConfigMixin:
         self._request_log[user_key] = recent
         return True
 
+    def _prune_request_log(self, now: float, window: float) -> None:
+        prune_interval = max(window, 60.0)
+        if now - getattr(self, "_last_request_log_prune", 0.0) < prune_interval:
+            return
+
+        self._last_request_log_prune = now
+        for user_key, timestamps in list(self._request_log.items()):
+            recent = [ts for ts in timestamps if now - ts < window]
+            if recent:
+                self._request_log[user_key] = recent
+            else:
+                self._request_log.pop(user_key, None)
+
     def _get_category_api_url(self, category: str) -> tuple[str, str]:
         meta = IMAGE_CATEGORIES[category]
-        config_url = (self.config.get(meta["config_key"], "") or "").strip()
+        config_url = self._get_str(meta["config_key"], "")
         if config_url:
             return config_url, "插件配置"
 
         return meta["default_url"], "内置默认"
 
     def _get_api_key(self) -> str:
-        return (self.config.get("default_api_key", "") or "").strip()
+        return self._get_str("default_api_key", "")
 
     def _get_user_key(self, event: AstrMessageEvent) -> str:
         platform = self._safe_call(event, "get_platform_name") or "unknown"
@@ -155,7 +169,9 @@ class UserConfigMixin:
     @staticmethod
     def _is_http_url(value: str) -> bool:
         parsed = urlparse(value)
-        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+        return (parsed.scheme in {"http", "https"} or not parsed.scheme) and bool(
+            parsed.netloc
+        )
 
     @staticmethod
     def _is_lolicon_v2_url(value: str) -> bool:
@@ -169,7 +185,9 @@ class UserConfigMixin:
     @staticmethod
     def _looks_like_image_url(value: str) -> bool:
         path = urlparse(value).path.lower()
-        return path.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"))
+        return path.endswith(
+            (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp")
+        )
 
     @staticmethod
     def _is_pixiv_direct_image_url(value: str) -> bool:

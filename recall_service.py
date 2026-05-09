@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -13,10 +14,13 @@ except ImportError:
     from settings import LOG_PREFIX
 
 
+CQ_REPLY_ID_RE = re.compile(r"\[CQ:reply,[^\]]*id=([^,\]]+)")
+
+
 class MeowPicRecallService:
     def __init__(self, context: Context):
         self.context = context
-        self._recalled_message_ids: set[str] = set()
+        self._recalled_message_ids: dict[str, None] = {}
 
     async def recall_replied_image(
         self,
@@ -24,8 +28,13 @@ class MeowPicRecallService:
         reply: dict[str, Any],
         recall_window_seconds: int,
     ) -> tuple[bool, str]:
-        message_id = reply["message_id"]
+        message_id = reply.get("message_id")
+        if not message_id:
+            return False, "没有找到引用消息 ID，无法撤回喵。"
+
         detail = await self.get_message_detail(event, message_id)
+        if not detail:
+            return False, "无法获取引用消息详情，已取消撤回喵。"
 
         self_id = get_self_id(event)
         sender_id = extract_sender_id(detail) or str_or_empty(reply.get("sender_id"))
@@ -126,14 +135,16 @@ class MeowPicRecallService:
 
     def _remember_recalled(self, message_id: Any):
         if message_id not in (None, ""):
-            self._recalled_message_ids.add(str(message_id))
+            self._recalled_message_ids[str(message_id)] = None
         if len(self._recalled_message_ids) > 500:
-            self._recalled_message_ids = set(list(self._recalled_message_ids)[-250:])
+            remove_count = len(self._recalled_message_ids) - 250
+            for key in list(self._recalled_message_ids)[:remove_count]:
+                self._recalled_message_ids.pop(key, None)
 
     async def fetch_history_messages(
         self, event: AstrMessageEvent, limit: int
     ) -> tuple[list[dict[str, Any]], bool]:
-        group_id = event.get_group_id()
+        group_id = safe_call(event, "get_group_id")
         variants: list[tuple[str, dict[str, Any]]] = []
 
         if group_id:
@@ -152,7 +163,11 @@ class MeowPicRecallService:
                 ]
             )
         else:
-            user_id = maybe_int(event.get_sender_id())
+            sender_id = safe_call(event, "get_sender_id")
+            if not sender_id:
+                return [], False
+
+            user_id = maybe_int(sender_id)
             variants.extend(
                 [
                     (
@@ -256,8 +271,12 @@ def extract_reply_from_raw(raw: Any) -> dict[str, Any] | None:
         raw_message = raw.get("message")
         if isinstance(raw_message, list):
             segments = raw_message
+        elif isinstance(raw_message, str):
+            return extract_reply_from_cq_text(raw_message)
     elif isinstance(raw, list):
         segments = raw
+    elif isinstance(raw, str):
+        return extract_reply_from_cq_text(raw)
 
     for seg in segments:
         if not isinstance(seg, dict):
@@ -275,19 +294,26 @@ def extract_reply_from_raw(raw: Any) -> dict[str, Any] | None:
     return None
 
 
+def extract_reply_from_cq_text(text: str) -> dict[str, Any] | None:
+    match = CQ_REPLY_ID_RE.search(text)
+    if not match:
+        return None
+    return {"message_id": match.group(1), "sender_id": "", "time": None}
+
+
 def extract_messages_from_history(ret: Any) -> list[dict[str, Any]]:
     if isinstance(ret, list):
         return [item for item in ret if isinstance(item, dict)]
     if not isinstance(ret, dict):
         return []
 
-    candidates = [
-        ret.get("messages"),
-        ret.get("message"),
-        ret.get("data", {}).get("messages")
-        if isinstance(ret.get("data"), dict)
-        else None,
-    ]
+    data = ret.get("data")
+    candidates = [ret.get("messages"), ret.get("message")]
+    if isinstance(data, dict):
+        candidates.extend([data.get("messages"), data.get("message")])
+    elif isinstance(data, list):
+        candidates.append(data)
+
     for value in candidates:
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]
