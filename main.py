@@ -4,7 +4,7 @@ import asyncio
 
 import aiohttp
 
-from astrbot.api.all import Star, Context, AstrBotConfig, logger
+from astrbot.api.all import Image, Star, Context, AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 
 try:
@@ -275,7 +275,12 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
             image_ref, temp_path = await self._fetch_image_for_event(
                 event, category, pixiv_tags or []
             )
-            yield event.image_result(image_ref)
+            if temp_path:
+                with open(temp_path, "rb") as image_file:
+                    image_bytes = image_file.read()
+                yield event.chain_result([Image.fromBytes(image_bytes)])
+            else:
+                yield event.image_result(image_ref)
         except UserFacingError as e:
             yield event.plain_result(str(e))
         except asyncio.TimeoutError:
