@@ -65,7 +65,10 @@ class MeowPicRecallService:
                     f"没有从协议端历史里找到最近 {recall_window_seconds} 秒内机器人发出的图片喵。"
                     "当前 OneBot 实现可能不支持消息历史接口。",
                 )
-            return False, f"最近 {recall_window_seconds} 秒内没有找到机器人发出的图片喵。"
+            return (
+                False,
+                f"最近 {recall_window_seconds} 秒内没有找到机器人发出的图片喵。",
+            )
 
         message_id = found.get("message_id")
         if await self.delete_message(event, message_id):
@@ -204,7 +207,9 @@ class MeowPicRecallService:
         if not message_id:
             return False
         try:
-            await self.call_action(event, "delete_msg", message_id=maybe_int(message_id))
+            await self.call_action(
+                event, "delete_msg", message_id=maybe_int(message_id)
+            )
             return True
         except Exception as e:
             logger.debug(f"{LOG_PREFIX} delete_msg {message_id} failed: {e}")
@@ -279,7 +284,9 @@ def extract_messages_from_history(ret: Any) -> list[dict[str, Any]]:
     candidates = [
         ret.get("messages"),
         ret.get("message"),
-        ret.get("data", {}).get("messages") if isinstance(ret.get("data"), dict) else None,
+        ret.get("data", {}).get("messages")
+        if isinstance(ret.get("data"), dict)
+        else None,
     ]
     for value in candidates:
         if isinstance(value, list):

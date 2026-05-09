@@ -3,37 +3,37 @@
     "description": "随机小姐姐 API",
     "type": "string",
     "default": "https://v2.xxapi.cn/api/meinvpic",
-    "hint": "/mm、/小姐姐、/美女、/meowpic get 默认使用这个接口。"
+    "hint": "/mm、/小姐姐、/美女 默认使用这个接口。"
   },
   "api_baisi_url": {
     "description": "白丝 API",
     "type": "string",
     "default": "https://v2.xxapi.cn/api/baisi",
-    "hint": "/白丝 或 /meowpic baisi 使用这个接口。"
+    "hint": "/白丝 或 /baisi 使用这个接口。"
   },
   "api_heisi_url": {
     "description": "黑丝 API",
     "type": "string",
     "default": "https://v2.xxapi.cn/api/heisi",
-    "hint": "/黑丝 或 /meowpic heisi 使用这个接口。"
+    "hint": "/黑丝 或 /heisi 使用这个接口。"
   },
   "api_acg_url": {
     "description": "二次元 API",
     "type": "string",
     "default": "https://v2.xxapi.cn/api/randomAcgPic?type=pc",
-    "hint": "/二次元 或 /meowpic acg 使用这个接口。"
+    "hint": "/二次元 或 /acg 使用这个接口。"
   },
   "api_jk_url": {
     "description": "JK API",
     "type": "string",
     "default": "https://v2.xxapi.cn/api/jk",
-    "hint": "/jk 或 /meowpic jk 使用这个接口。"
+    "hint": "/jk 使用这个接口。"
   },
   "api_pixiv_url": {
     "description": "Pixiv API",
     "type": "string",
     "default": "https://api.lolicon.app/setu/v2",
-    "hint": "/pixiv、/p站、/px 或 /meowpic pixiv 使用这个接口。使用 Lolicon v2 时会自动附加下方 Pixiv 参数。"
+    "hint": "/px 使用这个接口。使用 Lolicon v2 时会自动附加下方 Pixiv 参数。"
   },
   "pixiv_r18": {
     "description": "Pixiv R18 模式",
@@ -70,12 +70,6 @@
     "type": "string",
     "default": "",
     "hint": "Lolicon v2 参数 aspectRatio，例如 lt1 竖图、gt1 横图、eq1 正方形，留空不筛选。"
-  },
-  "default_api_url": {
-    "description": "旧版默认 API 地址",
-    "type": "string",
-    "default": "",
-    "hint": "兼容旧版配置。一般不用填；随机小姐姐分类会优先使用 api_meinv_url。"
   },
   "default_api_key": {
     "description": "通用 API Key（可选）",

@@ -42,9 +42,8 @@ class ImageServiceMixin:
         category: str,
         pixiv_tags: list[str],
     ) -> tuple[str, str | None]:
-        user_conf = await self._get_user_config(self._get_user_key(event))
-        api_url, _ = self._get_category_api_url(category, user_conf)
-        api_key = self._get_category_api_key(category, user_conf)
+        api_url, _ = self._get_category_api_url(category)
+        api_key = self._get_api_key()
 
         request_url, headers = self._build_request(
             api_url, api_key, category, pixiv_tags
@@ -133,7 +132,9 @@ class ImageServiceMixin:
         if last_content_type:
             raise UserFacingError(f"图片下载失败: 返回类型 {last_content_type}")
         if timed_out:
-            raise UserFacingError("图片下载超时了喵，可以调大请求超时或换一个 Pixiv 反代")
+            raise UserFacingError(
+                "图片下载超时了喵，可以调大请求超时或换一个 Pixiv 反代"
+            )
         if client_error:
             raise UserFacingError(f"图片下载失败: {client_error}")
         raise UserFacingError("图片下载失败")

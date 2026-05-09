@@ -1,17 +1,12 @@
 from __future__ import annotations
 
 
-KV_USER_CONFIGS = "user_configs"
 LOG_PREFIX = "[MeowPic]"
 DEFAULT_LIMIT_MESSAGE = "冲的太快了喵~"
 DEFAULT_RECALL_SUCCESS_MESSAGE = "哦齁齁哦哦哦~"
 DEFAULT_RECALL_EXPIRED_MESSAGE = "快@管理员来救一下哇 喵~"
 DEFAULT_TIMEOUT_SECONDS = 15.0
-DEFAULT_CATEGORY = "meinv"
 PIXIV_LOLICON_API_URL = "https://api.lolicon.app/setu/v2"
-PIXIV_LEGACY_MOSSIA_API_URL = (
-    "https://api.mossia.top/duckMo?num=1&r18Type=0&proxy=i.pixiv.re"
-)
 PIXIV_ALLOWED_SIZES = {"original", "regular", "small", "thumb", "mini"}
 PIXIV_MAX_TAG_GROUPS = 3
 FALSE_STRINGS = {"", "0", "false", "none", "null", "off", "no"}
@@ -47,30 +42,6 @@ IMAGE_CATEGORIES = {
         "default_url": PIXIV_LOLICON_API_URL,
     },
 }
-CATEGORY_ALIASES = {
-    "meinv": "meinv",
-    "mm": "meinv",
-    "meizi": "meinv",
-    "小姐姐": "meinv",
-    "美女": "meinv",
-    "随机小姐姐": "meinv",
-    "baisi": "baisi",
-    "bs": "baisi",
-    "白丝": "baisi",
-    "heisi": "heisi",
-    "hs": "heisi",
-    "黑丝": "heisi",
-    "acg": "acg",
-    "二次元": "acg",
-    "动漫": "acg",
-    "jk": "jk",
-    "pixiv": "pixiv",
-    "px": "pixiv",
-    "p站": "pixiv",
-    "p站图": "pixiv",
-    "pixiv非r18": "pixiv",
-}
-DEFAULT_API_URL = IMAGE_CATEGORIES[DEFAULT_CATEGORY]["default_url"]
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -105,4 +76,3 @@ PREFERRED_IMAGE_KEYS = {
     "src",
     "download_url",
 }
-SECRET_QUERY_KEYS = {"key", "apikey", "api_key", "token", "access_token", "auth"}
