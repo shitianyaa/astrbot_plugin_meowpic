@@ -217,45 +217,24 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         return bool(trigger and message == trigger)
 
     def _is_admin(self, event: AstrMessageEvent) -> bool:
-        direct = self._safe_call(event, "is_admin")
-        if isinstance(direct, bool):
-            return direct
-        if direct is not None:
-            return str(direct).strip().lower() in {"1", "true", "yes", "admin", "owner"}
+        # 优先使用框架标准 API
+        try:
+            return event.is_admin()
+        except Exception:
+            pass
 
-        for value in self._possible_sender_roles(event):
-            role = str(value).strip().lower()
-            if role in {
-                "admin",
-                "administrator",
-                "owner",
-                "superuser",
-                "管理员",
-                "群主",
-            }:
-                return True
+        # fallback：OneBot 平台 raw_message 检查
+        try:
+            message_obj = getattr(event, "message_obj", None)
+            raw = getattr(message_obj, "raw_message", None)
+            if isinstance(raw, dict):
+                sender = raw.get("sender")
+                if isinstance(sender, dict):
+                    return sender.get("role") in ("owner", "admin")
+        except Exception:
+            pass
+
         return False
-
-    def _possible_sender_roles(self, event: AstrMessageEvent):
-        role = getattr(event, "role", None)
-        if role:
-            yield role
-
-        message_obj = getattr(event, "message_obj", None)
-        sender = getattr(message_obj, "sender", None)
-        for attr in ("role", "permission"):
-            value = getattr(sender, attr, None)
-            if value:
-                yield value
-
-        raw = getattr(message_obj, "raw_message", None)
-        if isinstance(raw, dict):
-            raw_sender = raw.get("sender")
-            if isinstance(raw_sender, dict):
-                for key in ("role", "permission"):
-                    value = raw_sender.get(key)
-                    if value:
-                        yield value
 
     async def _yield_random_image(
         self,

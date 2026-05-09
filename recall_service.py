@@ -4,9 +4,10 @@ import re
 import time
 from typing import Any
 
-from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context
+from astrbot.api.all import logger
+from astrbot.api.event import AstrMessageEvent
+from astrbot.api.event import filter
+from astrbot.api.all import Context
 
 try:
     from .settings import LOG_PREFIX

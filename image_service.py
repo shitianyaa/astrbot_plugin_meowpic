@@ -12,7 +12,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunpa
 import aiohttp
 from PIL import Image
 
-from astrbot.api import logger
+from astrbot.api.all import logger
 from astrbot.api.event import AstrMessageEvent
 
 try:

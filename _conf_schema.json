@@ -81,18 +81,21 @@
     "description": "请求超时（秒）",
     "type": "float",
     "default": 15.0,
+    "slider": {"min": 3, "max": 120, "step": 1},
     "hint": "访问图片 API 的最大等待秒数，范围 3-120。"
   },
   "image_max_size_kb": {
     "description": "图片压缩阈值（KB）",
     "type": "int",
     "default": 3072,
+    "slider": {"min": 256, "max": 10240, "step": 256},
     "hint": "图片超过此大小（KB）时会自动压缩，以避免 NapCat 发送超时（retcode=1200）。范围 256-10240，默认 3072（3MB）。"
   },
   "image_max_dimension": {
     "description": "图片最大边长（像素）",
     "type": "int",
     "default": 1920,
+    "slider": {"min": 480, "max": 4096, "step": 16},
     "hint": "压缩时图片长边最大像素，超过会等比缩小。范围 480-4096，默认 1920。"
   },
   "image_referer": {
@@ -135,12 +138,14 @@
     "description": "图片撤回窗口（秒）",
     "type": "int",
     "default": 120,
+    "slider": {"min": 1, "max": 3600, "step": 1},
     "hint": "默认只查找最近 120 秒内机器人发出的图片。QQ 普通消息通常只能在 2 分钟内撤回，范围 1-3600。"
   },
   "recall_history_limit": {
     "description": "图片撤回历史查找数量",
     "type": "int",
     "default": 30,
+    "slider": {"min": 5, "max": 100, "step": 5},
     "hint": "未引用消息时，从最近多少条历史消息里查找机器人发出的上一张图片。范围 5-100。"
   },
   "rate_limit_enabled": {
@@ -153,12 +158,14 @@
     "description": "限流次数",
     "type": "int",
     "default": 3,
+    "slider": {"min": 1, "max": 30, "step": 1},
     "hint": "同一用户在限流窗口内最多可请求次数。"
   },
   "rate_limit_window_seconds": {
     "description": "限流窗口（秒）",
     "type": "float",
     "default": 60.0,
+    "slider": {"min": 1, "max": 3600, "step": 1},
     "hint": "限流统计的时间窗口，范围 1-3600 秒。"
   },
   "rate_limit_message": {
