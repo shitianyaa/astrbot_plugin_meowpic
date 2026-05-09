@@ -1,11 +1,11 @@
 name: astrbot_plugin_meowpic
 display_name: 喵图姬
-short_desc: 多分类随机图片，支持 Pixiv 标签、自定义 API、图片撤回和短时限流。
 desc: 多分类随机图片插件，支持小姐姐、白丝、黑丝、二次元、JK、Pixiv 标签随机、自定义 API、图片撤回和用户级短时限流。
-version: 1.4.1
+version: v1.4.1
 astrbot_version: ">=4.16"
 author: Sham1k0
 repo: "https://github.com/shitianyaa/astrbot_plugin_meowpic"
+dependencies: []
 support_platforms:
   - aiocqhttp
   - qq_official

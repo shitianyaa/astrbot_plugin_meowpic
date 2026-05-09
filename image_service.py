@@ -63,18 +63,20 @@ class ImageServiceMixin:
                 raise UserFacingError(f"图片 API 返回了 {resp.status}，请检查配置")
 
             content_type = resp.headers.get("Content-Type", "").split(";", 1)[0].lower()
-            if content_type.startswith("image/"):
-                image_bytes = await resp.read()
-                if not image_bytes:
-                    raise UserFacingError("图片 API 返回了空图片")
-                if not self._looks_like_image_bytes(image_bytes):
+            body = await resp.read()
+            if not body:
+                raise UserFacingError("图片 API 返回了空内容")
+
+            if content_type.startswith("image/") or self._looks_like_image_bytes(body):
+                if not self._looks_like_image_bytes(body):
                     raise UserFacingError("图片 API 返回的内容不是有效图片")
                 temp_path = self._write_temp_image(
-                    image_bytes, content_type, str(resp.url)
+                    body, content_type, str(resp.url)
                 )
                 return temp_path, temp_path
 
-            raw_text = await resp.text()
+            encoding = resp.charset or "utf-8"
+            raw_text = body.decode(encoding, errors="replace")
 
         image_url = self._extract_image_url(raw_text, request_url)
         if not image_url:

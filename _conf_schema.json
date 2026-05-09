@@ -75,7 +75,6 @@
     "description": "通用 API Key（可选）",
     "type": "string",
     "default": "",
-    "obvious_hint": true,
     "hint": "可选。仅当 API 地址里写了 {api_key} 占位符时才会被替换进去。"
   },
   "request_timeout_seconds": {

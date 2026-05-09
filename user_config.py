@@ -95,8 +95,7 @@ class UserConfigMixin:
                         return str(raw_sender[key])
 
         umo = getattr(event, "unified_msg_origin", "")
-        name = self._safe_call(event, "get_sender_name") or "unknown"
-        return f"{umo}:{name}"
+        return umo or "unknown"
 
     @staticmethod
     def _safe_call(obj: Any, method: str) -> Any:

@@ -4,9 +4,8 @@ import asyncio
 
 import aiohttp
 
-from astrbot.api import AstrBotConfig, logger
+from astrbot.api.all import Star, Context, AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star, register
 
 try:
     from .errors import UserFacingError
@@ -32,12 +31,6 @@ except ImportError:
     from user_config import UserConfigMixin
 
 
-@register(
-    "astrbot_plugin_meowpic",
-    "Sham1k0",
-    "多分类随机图片插件，支持 Pixiv 标签、自定义 API、API Key 与图片撤回",
-    "1.4.1",
-)
 class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -106,10 +99,12 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
             yield result
 
     @filter.event_message_type(filter.EventMessageType.ALL)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     async def on_hentai_recall(self, event: AstrMessageEvent):
         """监听 hentai 并撤回机器人发出的图片"""
         if not self._is_recall_trigger(event):
             return
+        event.stop_event()
         async for result in self._yield_recall_image(event):
             yield result
 
@@ -173,12 +168,6 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
             yield result
 
     async def _yield_recall_image(self, event: AstrMessageEvent):
-        if self._safe_call(event, "get_platform_name") != "aiocqhttp":
-            yield event.plain_result(
-                "当前平台暂不支持撤回喵，仅支持 aiocqhttp/OneBot。"
-            )
-            return
-
         if not self._can_use_recall_image(event):
             yield event.plain_result("此指令仅管理员或喵图撤回白名单用户可用喵。")
             return
