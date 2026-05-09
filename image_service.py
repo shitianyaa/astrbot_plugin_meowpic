@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
 import aiohttp
+from PIL import Image
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
@@ -73,6 +74,7 @@ class ImageServiceMixin:
                 temp_path = self._write_temp_image(
                     body, content_type, str(resp.url)
                 )
+                temp_path = self._maybe_compress_image(temp_path)
                 return temp_path, temp_path
 
             encoding = resp.charset or "utf-8"
@@ -84,6 +86,7 @@ class ImageServiceMixin:
 
         # 下载图片到本地，避免 QQ 客户端访问外网图床超时（如 retcode=1200）
         temp_path = await self._download_image(image_url, timeout, request_url)
+        temp_path = self._maybe_compress_image(temp_path)
         return temp_path, temp_path
 
     async def _download_image(
@@ -401,6 +404,52 @@ class ImageServiceMixin:
         with os.fdopen(fd, "wb") as file:
             file.write(image_bytes)
         return temp_path
+
+    def _maybe_compress_image(self, path: str) -> str:
+        """如果图片超过大小限制，进行压缩以避免 NapCat 发送超时 (retcode=1200)"""
+        max_size_kb = self._get_int("image_max_size_kb", 3072, 256, 10240)
+        max_dimension = self._get_int("image_max_dimension", 1920, 480, 4096)
+
+        try:
+            file_size_kb = os.path.getsize(path) / 1024
+            if file_size_kb <= max_size_kb:
+                return path
+
+            logger.info(
+                f"{LOG_PREFIX} 图片 {file_size_kb:.0f}KB 超过限制 {max_size_kb}KB，开始压缩"
+            )
+
+            with Image.open(path) as img:
+                # 转换 RGBA/P 模式为 RGB（JPEG 不支持透明通道）
+                if img.mode in ("RGBA", "P"):
+                    background = Image.new("RGB", img.size, (255, 255, 255))
+                    if img.mode == "P":
+                        img = img.convert("RGBA")
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                # 按比例缩小尺寸
+                w, h = img.size
+                if w > max_dimension or h > max_dimension:
+                    ratio = min(max_dimension / w, max_dimension / h)
+                    new_w = int(w * ratio)
+                    new_h = int(h * ratio)
+                    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+                # 写回原路径（以 JPEG 格式，质量 85）
+                img.save(path, "JPEG", quality=85, optimize=True)
+
+            new_size_kb = os.path.getsize(path) / 1024
+            logger.info(
+                f"{LOG_PREFIX} 图片压缩完成: {file_size_kb:.0f}KB -> {new_size_kb:.0f}KB"
+            )
+            return path
+
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX} 图片压缩失败，使用原图: {e}")
+            return path
 
     @staticmethod
     def _cleanup_temp_file(path: str):
