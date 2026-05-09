@@ -1,6 +1,8 @@
 # 喵图姬
 
-![访问量](https://visitor-badge.laobi.icu/badge?page_id=shitianyaa.astrbot_plugin_meowpic)
+<div align="center">
+  <img src="https://count.getloli.com/@astrbot-plugin-meowpic?name=astrbot-plugin-meowpic&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
+</div>
 
 AstrBot 随机图片插件，内置多个图片分类，支持 Pixiv 标签、短时限流和图片撤回。
 
