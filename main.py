@@ -242,6 +242,7 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         category: str,
         pixiv_tags: list[str] | None = None,
     ):
+        event.stop_event()
         if not self._record_request(event):
             yield event.plain_result(
                 self._get_str("rate_limit_message", DEFAULT_LIMIT_MESSAGE)
@@ -261,8 +262,9 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
                 except Exception as e:
                     if self._is_probably_delivered_send_timeout(e):
                         logger.warning(
-                            f"{LOG_PREFIX} image may have been sent, "
-                            f"but NapCat/QQNT returned a send receipt timeout: {e}"
+                            f"{LOG_PREFIX} 图片可能过大，NapCat/QQNT 等待发送回执超时；"
+                            f"图片通常仍会继续发送。如果看到本提示后 30 秒内仍未收到图片，"
+                            f"则本次发送失败。原始错误: {e}"
                         )
                         return
                     raise
@@ -293,6 +295,5 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
                 "onmsginfolistupdate",
                 "timeout",
                 "timed out",
-                "超时",
             )
         )
