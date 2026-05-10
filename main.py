@@ -255,11 +255,20 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
                 event, category, pixiv_tags or []
             )
             if temp_path:
-                with open(temp_path, "rb") as image_file:
-                    image_bytes = image_file.read()
-                yield event.chain_result([Image.fromBytes(image_bytes)])
-            else:
-                yield event.image_result(image_ref)
+                chain = event.chain_result([Image.fromFileSystem(temp_path)])
+                try:
+                    await event.send(chain)
+                except Exception as e:
+                    if self._is_probably_delivered_send_timeout(e):
+                        logger.warning(
+                            f"{LOG_PREFIX} image may have been sent, "
+                            f"but NapCat/QQNT returned a send receipt timeout: {e}"
+                        )
+                        return
+                    raise
+                return
+
+            yield event.image_result(image_ref)
         except UserFacingError as e:
             yield event.plain_result(str(e))
         except asyncio.TimeoutError:
@@ -270,3 +279,20 @@ class MeowPicPlugin(ImageServiceMixin, UserConfigMixin, Star):
         finally:
             if temp_path:
                 self._cleanup_temp_file(temp_path)
+
+    @staticmethod
+    def _is_probably_delivered_send_timeout(error: Exception) -> bool:
+        if str(getattr(error, "retcode", "")) != "1200":
+            return False
+        message = str(error).lower()
+        return any(
+            marker in message
+            for marker in (
+                "ntevent",
+                "sendmsg",
+                "onmsginfolistupdate",
+                "timeout",
+                "timed out",
+                "超时",
+            )
+        )
