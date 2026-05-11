@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
 import aiohttp
-from PIL import Image
+from PIL import Image, ImageOps
 
 from astrbot.api.all import logger
 from astrbot.api.event import AstrMessageEvent
@@ -407,49 +407,108 @@ class ImageServiceMixin:
 
     def _maybe_compress_image(self, path: str) -> str:
         """如果图片超过大小限制，进行压缩以避免 NapCat 发送超时 (retcode=1200)"""
-        max_size_kb = self._get_int("image_max_size_kb", 3072, 256, 10240)
+        max_size_kb = self._get_int("image_max_size_kb", 2048, 256, 10240)
         max_dimension = self._get_int("image_max_dimension", 1920, 480, 4096)
+        max_size_bytes = max_size_kb * 1024
 
         try:
-            file_size_kb = os.path.getsize(path) / 1024
-            if file_size_kb <= max_size_kb:
+            original_size_bytes = os.path.getsize(path)
+            original_size_kb = original_size_bytes / 1024
+            if original_size_bytes <= max_size_bytes:
                 return path
 
+            with Image.open(path) as source:
+                width, height = source.size
+                logger.info(
+                    f"{LOG_PREFIX} 图片 {original_size_kb:.0f}KB, "
+                    f"{width}x{height} 超过 {max_size_kb}KB，开始压缩"
+                )
+
+                image = self._image_to_rgb(source)
+                image = self._resize_to_max_dimension(image, max_dimension)
+                compressed_path = self._save_jpeg_under_size(image, max_size_bytes)
+
+            new_size_kb = os.path.getsize(compressed_path) / 1024
             logger.info(
-                f"{LOG_PREFIX} 图片 {file_size_kb:.0f}KB 超过限制 {max_size_kb}KB，开始压缩"
+                f"{LOG_PREFIX} 图片压缩完成: {original_size_kb:.0f}KB -> "
+                f"{new_size_kb:.0f}KB"
             )
-
-            with Image.open(path) as img:
-                # 转换 RGBA/P 模式为 RGB（JPEG 不支持透明通道）
-                if img.mode in ("RGBA", "P"):
-                    background = Image.new("RGB", img.size, (255, 255, 255))
-                    if img.mode == "P":
-                        img = img.convert("RGBA")
-                    background.paste(img, mask=img.split()[-1])
-                    img = background
-                elif img.mode != "RGB":
-                    img = img.convert("RGB")
-
-                # 按比例缩小尺寸
-                w, h = img.size
-                if w > max_dimension or h > max_dimension:
-                    ratio = min(max_dimension / w, max_dimension / h)
-                    new_w = int(w * ratio)
-                    new_h = int(h * ratio)
-                    img = img.resize((new_w, new_h), Image.LANCZOS)
-
-                # 写回原路径（以 JPEG 格式，质量 85）
-                img.save(path, "JPEG", quality=85, optimize=True)
-
-            new_size_kb = os.path.getsize(path) / 1024
-            logger.info(
-                f"{LOG_PREFIX} 图片压缩完成: {file_size_kb:.0f}KB -> {new_size_kb:.0f}KB"
-            )
-            return path
+            self._cleanup_temp_file(path)
+            return compressed_path
 
         except Exception as e:
             logger.warning(f"{LOG_PREFIX} 图片压缩失败，使用原图: {e}")
             return path
+
+    @staticmethod
+    def _image_to_rgb(source: Image.Image) -> Image.Image:
+        if getattr(source, "is_animated", False):
+            source.seek(0)
+
+        image = ImageOps.exif_transpose(source)
+        has_alpha = image.mode in ("RGBA", "LA") or (
+            image.mode == "P" and "transparency" in image.info
+        )
+        if has_alpha:
+            image = image.convert("RGBA")
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            background.paste(image, mask=image.getchannel("A"))
+            return background
+        if image.mode != "RGB":
+            return image.convert("RGB")
+        return image.copy()
+
+    @staticmethod
+    def _resize_to_max_dimension(image: Image.Image, max_dimension: int) -> Image.Image:
+        width, height = image.size
+        if max(width, height) <= max_dimension:
+            return image
+        ratio = max_dimension / max(width, height)
+        new_size = (
+            max(1, int(width * ratio)),
+            max(1, int(height * ratio)),
+        )
+        return image.resize(new_size, Image.LANCZOS)
+
+    def _save_jpeg_under_size(self, image: Image.Image, max_size_bytes: int) -> str:
+        compressed_path = self._empty_temp_image_path(".jpg")
+        quality_steps = (85, 80, 75, 70, 65, 60, 55, 50, 45, 40)
+        min_dimension = 480
+
+        try:
+            current = image
+            while True:
+                for quality in quality_steps:
+                    current.save(
+                        compressed_path,
+                        "JPEG",
+                        quality=quality,
+                        optimize=True,
+                        progressive=True,
+                        subsampling="4:2:0",
+                    )
+                    if os.path.getsize(compressed_path) <= max_size_bytes:
+                        return compressed_path
+
+                longest_side = max(current.size)
+                if longest_side <= min_dimension:
+                    logger.warning(
+                        f"{LOG_PREFIX} 图片已压缩到 {longest_side}px，"
+                        "但仍超过目标大小，将使用当前最小版本"
+                    )
+                    return compressed_path
+
+                next_longest_side = max(min_dimension, int(longest_side * 0.85))
+                current = self._resize_to_max_dimension(current, next_longest_side)
+        except Exception:
+            self._cleanup_temp_file(compressed_path)
+            raise
+
+    @staticmethod
+    def _empty_temp_image_path(suffix: str) -> str:
+        fd, temp_path = tempfile.mkstemp(prefix="meowpic_", suffix=suffix)
+        os.close(fd)
+        return temp_path
 
     @staticmethod
     def _cleanup_temp_file(path: str):

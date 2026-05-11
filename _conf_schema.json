@@ -87,9 +87,9 @@
   "image_max_size_kb": {
     "description": "图片压缩阈值（KB）",
     "type": "int",
-    "default": 3072,
+    "default": 2048,
     "slider": {"min": 256, "max": 10240, "step": 256},
-    "hint": "图片超过此大小（KB）时会自动压缩，以避免 NapCat 发送超时（retcode=1200）。范围 256-10240，默认 3072（3MB）。"
+    "hint": "图片超过此大小（KB）时会自动压缩，以避免 NapCat 发送超时（retcode=1200）。范围 256-10240，默认 2048（2MB）。"
   },
   "image_max_dimension": {
     "description": "图片最大边长（像素）",
